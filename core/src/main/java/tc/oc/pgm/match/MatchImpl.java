@@ -9,18 +9,7 @@ import java.io.File;
 import java.lang.ref.WeakReference;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
-import java.util.UUID;
-import java.util.WeakHashMap;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.ScheduledExecutorService;
@@ -119,7 +108,7 @@ public class MatchImpl implements Match {
   private final Map<UUID, MatchPlayer> players;
   private final Map<MatchPlayer, Party> partyChanges;
   private final Set<Party> parties;
-  private final Set<VictoryCondition> victory;
+  private final List<VictoryCondition> victory;
   private final RankedSet<Competitor> competitors;
   private final Observers observers;
   private final MatchFeatureContext features;
@@ -152,7 +141,7 @@ public class MatchImpl implements Match {
     this.players = new ConcurrentHashMap<>();
     this.partyChanges = new WeakHashMap<>();
     this.parties = new LinkedHashSet<>();
-    this.victory = new LinkedHashSet<>();
+    this.victory = new LinkedList<>();
     this.competitors =
         new RankedSet<>(
             (Competitor a, Competitor b) -> {
@@ -201,9 +190,10 @@ public class MatchImpl implements Match {
           break;
         case FINISHED:
           calculateVictory();
+          Set<Competitor> winners = this.competitors.getRank(0);
           getExecutor(MatchScope.RUNNING).shutdownNow();
           getCountdown().cancelAll();
-          callEvent(new MatchFinishEvent(this, competitors.getRank(0)));
+          callEvent(new MatchFinishEvent(this, winners));
           break;
       }
 
@@ -569,10 +559,12 @@ public class MatchImpl implements Match {
 
   @Override
   public void addVictoryCondition(VictoryCondition condition) {
-    if (victory.add(condition)) {
-      logger.fine("Added victory condition " + condition);
-      calculateVictory();
-    }
+    Comparator<VictoryCondition> victoryConditionOrder = Comparator.comparing(VictoryCondition::getPriority);
+    victory.add(condition);
+    victory.sort(victoryConditionOrder);
+    logger.info("Added victory condition " + condition);
+    logger.info(String.valueOf(victory));
+    calculateVictory();
   }
 
   @Override
